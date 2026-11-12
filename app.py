@@ -335,6 +335,7 @@ def create_invoice():
     try:
         with open_database() as (connection, cursor):
             products = discount_stock(cursor, data["detalles"])
+            xml = build_invoice_xml(data, products)
             connection.commit()
     except InventoryConflict as conflict:
         return jsonify({
@@ -345,7 +346,6 @@ def create_invoice():
     except Exception:
         return database_error()
 
-    xml = build_invoice_xml(data, products)
     return Response(xml, status=200, content_type="application/xml; charset=utf-8")
 
 

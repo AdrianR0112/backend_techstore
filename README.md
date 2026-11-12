@@ -34,6 +34,9 @@ Cada detalle enviado a `/api/facturas` debe contener `id`, `cantidad` y la
 `version` obtenida desde `/api/productos`. Un stock insuficiente o una version
 obsoleta devuelve HTTP `409` y revierte toda la transaccion.
 
+La migracion aplicada a Azure para agregar las imagenes queda documentada en
+`migrations/001_add_product_image_url.sql`.
+
 ## Render
 
 El archivo `render.yaml` deja preparado el servicio `backend-techstore`. Luego
