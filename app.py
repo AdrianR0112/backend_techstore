@@ -159,10 +159,14 @@ def validate_invoice(data):
             not isinstance(client_name, str)
             or not client_name.strip()
             or len(client_name.strip()) > 50
+            or not re.fullmatch(
+                r"[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?:[- '][a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+)*",
+                client_name.strip(),
+            )
         ):
             errors.append({
                 "campo": "cliente.nombre",
-                "error": "El nombre del cliente es obligatorio y admite hasta 50 caracteres.",
+                "error": "El nombre es obligatorio, admite hasta 50 caracteres y solo puede contener letras.",
             })
         client_id = client.get("cedula_ruc")
         if not is_valid_ecuadorian_id(client_id.strip() if isinstance(client_id, str) else client_id):

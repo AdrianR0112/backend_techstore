@@ -60,6 +60,16 @@ class InvoiceTests(unittest.TestCase):
         self.assertIn("cliente.nombre", fields)
         self.assertIn("cliente.cedula_ruc", fields)
 
+    def test_rejects_digits_in_client_name(self):
+        invoice = valid_invoice()
+        invoice["cliente"]["nombre"] = "Ana123"
+
+        errors = validate_invoice(invoice)
+
+        self.assertTrue(
+            any(error["campo"] == "cliente.nombre" for error in errors)
+        )
+
     def test_validation_requires_version(self):
         invoice = valid_invoice()
         del invoice["detalles"][0]["version"]
