@@ -2,7 +2,13 @@ from collections import namedtuple
 from decimal import Decimal
 import unittest
 
-from app import InventoryConflict, build_invoice_xml, discount_stock, validate_invoice
+from app import (
+    InventoryConflict,
+    build_invoice_xml,
+    discount_stock,
+    is_valid_ecuadorian_id,
+    validate_invoice,
+)
 
 
 ProductRow = namedtuple("ProductRow", "id names price stock version image_url", defaults=[""])
@@ -29,12 +35,31 @@ def valid_invoice():
     return {
         "numero": "F-001",
         "fecha": "2026-11-11",
-        "cliente": {"nombre": "Ana", "cedula_ruc": "1804567890"},
+        "cliente": {"nombre": "Ana", "cedula_ruc": "1712345675"},
         "detalles": [{"id": 1, "cantidad": 2, "version": 1}],
     }
 
 
 class InvoiceTests(unittest.TestCase):
+    def test_accepts_valid_cedula_and_natural_ruc(self):
+        self.assertTrue(is_valid_ecuadorian_id("1712345675"))
+        self.assertTrue(is_valid_ecuadorian_id("1712345675001"))
+        self.assertTrue(is_valid_ecuadorian_id("1791234561001"))
+        self.assertTrue(is_valid_ecuadorian_id("1761234510001"))
+
+    def test_rejects_invalid_client_name_and_id(self):
+        invoice = valid_invoice()
+        invoice["cliente"] = {
+            "nombre": "A" * 51,
+            "cedula_ruc": "1712345674",
+        }
+
+        errors = validate_invoice(invoice)
+
+        fields = {error["campo"] for error in errors}
+        self.assertIn("cliente.nombre", fields)
+        self.assertIn("cliente.cedula_ruc", fields)
+
     def test_validation_requires_version(self):
         invoice = valid_invoice()
         del invoice["detalles"][0]["version"]

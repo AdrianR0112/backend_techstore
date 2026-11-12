@@ -34,6 +34,10 @@ Cada detalle enviado a `/api/facturas` debe contener `id`, `cantidad` y la
 `version` obtenida desde `/api/productos`. Un stock insuficiente o una version
 obsoleta devuelve HTTP `409` y revierte toda la transaccion.
 
+El objeto `cliente` debe incluir un `nombre` obligatorio de hasta 50 caracteres
+y una `cedula_ruc` ecuatoriana valida de 10 o 13 digitos. La API verifica
+longitud, provincia, tipo de contribuyente y digito verificador.
+
 La migracion aplicada a Azure para agregar las imagenes queda documentada en
 `migrations/001_add_product_image_url.sql`.
 

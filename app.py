@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
 import os
+import re
 import xml.etree.ElementTree as ET
 
 import certifi
@@ -71,6 +72,63 @@ def product_to_dict(row):
     }
 
 
+def is_valid_ecuadorian_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r"\d{10}(?:\d{3})?", value):
+        return False
+
+    digits = [int(character) for character in value]
+    province = int(value[:2])
+    if not 1 <= province <= 24:
+        return False
+
+    if len(value) == 10:
+        return is_valid_cedula_digits(digits)
+
+    establishment = int(value[-3:])
+    if establishment == 0:
+        return False
+
+    taxpayer_type = digits[2]
+    if taxpayer_type < 6:
+        return is_valid_cedula_digits(digits[:10])
+    if taxpayer_type == 9:
+        return is_valid_modulo_eleven(
+            digits,
+            [4, 3, 2, 7, 6, 5, 4, 3, 2],
+            verifier_index=9,
+        )
+    if taxpayer_type == 6:
+        return is_valid_modulo_eleven(
+            digits,
+            [3, 2, 7, 6, 5, 4, 3, 2],
+            verifier_index=8,
+        )
+    return False
+
+
+def is_valid_cedula_digits(digits):
+    if len(digits) < 10 or digits[2] >= 6:
+        return False
+
+    total = 0
+    for index, digit in enumerate(digits[:9]):
+        value = digit * (2 if index % 2 == 0 else 1)
+        total += value - 9 if value > 9 else value
+
+    verifier = (10 - total % 10) % 10
+    return digits[9] == verifier
+
+
+def is_valid_modulo_eleven(digits, coefficients, verifier_index):
+    total = sum(
+        digits[index] * coefficient
+        for index, coefficient in enumerate(coefficients)
+    )
+    remainder = total % 11
+    verifier = 0 if remainder == 0 else 11 - remainder
+    return verifier < 10 and digits[verifier_index] == verifier
+
+
 def validate_invoice(data):
     errors = []
     if not isinstance(data, dict) or not data:
@@ -96,15 +154,21 @@ def validate_invoice(data):
     if not isinstance(client, dict):
         errors.append({"campo": "cliente", "error": "El cliente debe ser un objeto."})
     else:
-        if not isinstance(client.get("nombre"), str) or not client["nombre"].strip():
+        client_name = client.get("nombre")
+        if (
+            not isinstance(client_name, str)
+            or not client_name.strip()
+            or len(client_name.strip()) > 50
+        ):
             errors.append({
                 "campo": "cliente.nombre",
-                "error": "El nombre del cliente es obligatorio.",
+                "error": "El nombre del cliente es obligatorio y admite hasta 50 caracteres.",
             })
-        if not isinstance(client.get("cedula_ruc"), str) or not client["cedula_ruc"].strip():
+        client_id = client.get("cedula_ruc")
+        if not is_valid_ecuadorian_id(client_id.strip() if isinstance(client_id, str) else client_id):
             errors.append({
                 "campo": "cliente.cedula_ruc",
-                "error": "La cedula o RUC del cliente es obligatorio.",
+                "error": "La cedula o RUC debe ser un numero ecuatoriano valido de 10 o 13 digitos.",
             })
 
     details = data.get("detalles")
