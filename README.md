@@ -39,7 +39,7 @@ La migracion aplicada a Azure para agregar las imagenes queda documentada en
 
 ## Render
 
-El archivo `render.yaml` deja preparado el servicio `backend-techstore`. Luego
-de conectarlo al repositorio, agrega las cuatro variables de Azure en el panel
-de Render. La URL prevista es `https://backend-techstore.onrender.com` si ese
-nombre esta disponible.
+El archivo `render.yaml` deja preparado el servicio `backend_techstore`.
+Luego de conectarlo al repositorio, agrega las cuatro variables de Azure en el
+panel de Render. La URL del servicio es
+`https://backend-techstore-9e9s.onrender.com`.

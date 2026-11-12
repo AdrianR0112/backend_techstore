@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: backend-techstore
+    name: backend_techstore
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
