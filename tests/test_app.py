@@ -15,16 +15,21 @@ ProductRow = namedtuple("ProductRow", "id names price stock version image_url", 
 
 
 class FakeCursor:
-    def __init__(self, initial, current=None, update_count=1):
+    def __init__(self, initial, current=None, update_count=1, update_counts=None):
         self.initial = initial
         self.current = current or initial
         self.update_count = update_count
+        self.update_counts = list(update_counts or [])
         self.rowcount = -1
         self._fetches = 0
 
     def execute(self, sql, params):
         if "UPDATE" in sql:
-            self.rowcount = self.update_count
+            self.rowcount = (
+                self.update_counts.pop(0)
+                if self.update_counts
+                else self.update_count
+            )
 
     def fetchone(self):
         self._fetches += 1
@@ -87,16 +92,26 @@ class InvoiceTests(unittest.TestCase):
         self.assertEqual(products[0]["cantidad"], 2)
         self.assertEqual(products[0]["precio"], Decimal("0.25"))
 
-    def test_stale_version_returns_conflict(self):
+    def test_stale_version_retries_when_stock_is_still_available(self):
         old = ProductRow(1, "Agua", Decimal("0.25"), 10, 1, "")
-        current = ProductRow(1, "Agua", Decimal("0.25"), 8, 2, "")
-        cursor = FakeCursor(old, current=current, update_count=0)
+        current = ProductRow(1, "Agua", Decimal("0.25"), 5, 2, "")
+        cursor = FakeCursor(old, current=current, update_counts=[0, 1])
+        details = [{"id": 1, "cantidad": 5, "version": 1}]
+
+        products = discount_stock(cursor, details)
+
+        self.assertEqual(products[0]["stock"], 5)
+        self.assertEqual(products[0]["version"], 2)
+
+    def test_rejects_purchase_only_when_current_stock_is_insufficient(self):
+        current = ProductRow(1, "Agua", Decimal("0.25"), 1, 2, "")
+        cursor = FakeCursor(current)
 
         with self.assertRaises(InventoryConflict) as raised:
             discount_stock(cursor, valid_invoice()["detalles"])
 
         self.assertEqual(raised.exception.status_code, 409)
-        self.assertEqual(raised.exception.product["version"], 2)
+        self.assertEqual(raised.exception.product["stock"], 1)
 
     def test_xml_uses_database_price(self):
         xml = build_invoice_xml(

@@ -32,7 +32,9 @@ flask --app app run
 
 Cada detalle enviado a `/api/facturas` debe contener `id`, `cantidad` y la
 `version` obtenida desde `/api/productos`. Un stock insuficiente o una version
-obsoleta devuelve HTTP `409` y revierte toda la transaccion.
+que cambie repetidamente devuelve HTTP `409` y revierte toda la transaccion.
+Cuando otra factura cambia la version pero aun existe stock suficiente, la API
+actualiza la version y reintenta el descuento automaticamente.
 
 El objeto `cliente` debe incluir un `nombre` obligatorio de hasta 50 caracteres
 y una `cedula_ruc` ecuatoriana valida de 10 o 13 digitos. La API verifica

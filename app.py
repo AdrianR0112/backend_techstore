@@ -13,6 +13,7 @@ import pytds
 app = Flask(__name__)
 
 IVA_GENERAL = Decimal("0.15")
+MAX_CONCURRENCY_RETRIES = 5
 
 
 class InventoryConflict(Exception):
@@ -237,43 +238,18 @@ def product_to_conflict_dict(row):
 
 
 def discount_stock(cursor, details):
-    """Descuenta todo el carrito con concurrencia optimista por version."""
+    """Descuenta el carrito y reintenta si otra compra cambia la version."""
     invoiced_products = []
 
-    for detail in details:
+    # Un orden estable reduce la posibilidad de interbloqueos entre facturas
+    # que contienen varios productos.
+    for detail in sorted(details, key=lambda item: item["id"]):
         product_id = detail["id"]
         quantity = detail["cantidad"]
-        expected_version = detail["version"]
+        attempt_version = detail["version"]
+        last_row = None
 
-        cursor.execute(
-            """
-            SELECT id, names, price, stock, version
-            FROM dbo.Products
-            WHERE id = %s
-            """,
-            (product_id,),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            raise InventoryConflict(
-                "Producto no encontrado.",
-                {"id": product_id},
-                status_code=404,
-            )
-
-        cursor.execute(
-            """
-            UPDATE dbo.Products
-            SET stock = stock - %s,
-                version = version + 1
-            WHERE id = %s
-              AND version = %s
-              AND stock >= %s
-            """,
-            (quantity, product_id, expected_version, quantity),
-        )
-
-        if cursor.rowcount == 0:
+        for _ in range(MAX_CONCURRENCY_RETRIES):
             cursor.execute(
                 """
                 SELECT id, names, price, stock, version
@@ -282,26 +258,48 @@ def discount_stock(cursor, details):
                 """,
                 (product_id,),
             )
-            current = cursor.fetchone()
-            if current is None:
+            row = cursor.fetchone()
+            if row is None:
                 raise InventoryConflict(
                     "Producto no encontrado.",
                     {"id": product_id},
                     status_code=404,
                 )
 
-            current_product = product_to_conflict_dict(current)
-            if int(current.version) != expected_version:
+            last_row = row
+            if int(row.stock) < quantity:
                 raise InventoryConflict(
-                    "El producto fue modificado por otra compra. Actualiza el catalogo e intenta nuevamente.",
-                    current_product,
+                    "No existe stock suficiente para completar la factura.",
+                    product_to_conflict_dict(row),
                 )
-            raise InventoryConflict(
-                "No existe stock suficiente para completar la factura.",
-                current_product,
+
+            # Si otra factura ya incremento la version, se adopta la version
+            # actual y se intenta el descuento sobre el stock mas reciente.
+            if int(row.version) != attempt_version:
+                attempt_version = int(row.version)
+
+            cursor.execute(
+                """
+                UPDATE dbo.Products
+                SET stock = stock - %s,
+                    version = version + 1
+                WHERE id = %s
+                  AND version = %s
+                  AND stock >= %s
+                """,
+                (quantity, product_id, attempt_version, quantity),
             )
 
-        invoiced_products.append(row_to_inventory_product(row, quantity))
+            if cursor.rowcount == 1:
+                invoiced_products.append(
+                    row_to_inventory_product(row, quantity)
+                )
+                break
+        else:
+            raise InventoryConflict(
+                "El inventario cambio varias veces durante la compra. Intenta nuevamente.",
+                product_to_conflict_dict(last_row) if last_row else {"id": product_id},
+            )
 
     return invoiced_products
 
